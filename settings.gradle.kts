@@ -65,6 +65,7 @@ include("playground")
 
 include("rsocket-core")
 include("rsocket-test")
+include("rsocket-integration-test")
 
 include("rsocket-transport-local")
 
