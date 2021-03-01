@@ -21,6 +21,26 @@ import io.rsocket.kotlin.payload.*
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
 
+public interface RSocketProducer<I> : ConnectionAcceptor {
+    public suspend fun ConnectionAcceptorContext.acceptInput(): I
+    public fun produce(input: I): RSocket
+
+    override suspend fun ConnectionAcceptorContext.accept(): RSocket {
+        return produce(acceptInput())
+    }
+}
+
+public fun interface RSocketRequestHandlerProducer : RSocketProducer<Unit> {
+    public operator fun invoke(parentJob: Job?): RSocket
+    public operator fun invoke(): RSocket = invoke(null)
+    override suspend fun ConnectionAcceptorContext.acceptInput() {
+    }
+
+    override fun produce(input: Unit): RSocket {
+        return invoke()
+    }
+}
+
 public class RSocketRequestHandlerBuilder internal constructor() {
     private var metadataPush: (suspend RSocket.(metadata: ByteReadPacket) -> Unit)? = null
     private var fireAndForget: (suspend RSocket.(payload: Payload) -> Unit)? = null
@@ -55,6 +75,28 @@ public class RSocketRequestHandlerBuilder internal constructor() {
 
     internal fun build(job: CompletableJob): RSocket =
         RSocketRequestHandler(job, metadataPush, fireAndForget, requestResponse, requestStream, requestChannel)
+
+    internal fun buildProducer(producerPparentJob: Job? = null): RSocketRequestHandlerProducer {
+        val metadataPush = this.metadataPush
+        val fireAndForget = this.fireAndForget
+        val requestResponse = this.requestResponse
+        val requestStream = this.requestStream
+        val requestChannel = this.requestChannel
+
+        return RSocketRequestHandlerProducer { parentJob ->
+            val job = Job(parentJob ?: producerPparentJob)
+            RSocketRequestHandler(job, metadataPush, fireAndForget, requestResponse, requestStream, requestChannel)
+        }
+    }
+}
+
+public fun RSocketRequestHandlerProducer(
+    parentJob: Job? = null,
+    configure: RSocketRequestHandlerBuilder.() -> Unit
+): RSocketRequestHandlerProducer {
+    val builder = RSocketRequestHandlerBuilder()
+    builder.configure()
+    return builder.buildProducer(parentJob)
 }
 
 @Suppress("FunctionName")

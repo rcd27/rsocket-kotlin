@@ -61,3 +61,6 @@ class RSocketConnector internal constructor(
         interceptors.wrapConnection(this)
             .logging(loggerFactory.logger("io.rsocket.kotlin.frame"))
 }
+
+public suspend fun <R : RSocketMarker> RSocketConnector.connect(wrapper: RSocketWrapper<R>, transport: ClientTransport): R =
+    wrapper.wrapRequester(connect(transport))

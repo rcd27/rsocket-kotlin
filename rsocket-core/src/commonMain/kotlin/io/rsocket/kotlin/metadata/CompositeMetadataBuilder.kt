@@ -22,11 +22,10 @@ import io.rsocket.kotlin.core.*
 import io.rsocket.kotlin.payload.*
 
 @ExperimentalMetadataApi
-public interface CompositeMetadataBuilder {
+public interface CompositeMetadataBuilder : Closeable {
     public fun add(mimeType: MimeType, metadata: ByteReadPacket)
     public fun add(metadata: Metadata)
 
-    public fun clean()
     public fun build(): CompositeMetadata
 }
 
@@ -37,7 +36,7 @@ public inline fun buildCompositeMetadata(block: CompositeMetadataBuilder.() -> U
         builder.block()
         return builder.build()
     } catch (t: Throwable) {
-        builder.clean()
+        builder.close()
         throw t
     }
 }
@@ -62,10 +61,6 @@ private class CompositeMetadataFromBuilder : CompositeMetadataBuilder, Composite
 
     override fun add(metadata: Metadata) {
         _entries += CompositeMetadata.Entry(metadata)
-    }
-
-    override fun clean() {
-        _entries.forEach { it.content.release() }
     }
 
     override fun build(): CompositeMetadata = this

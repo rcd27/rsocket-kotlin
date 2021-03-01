@@ -66,6 +66,9 @@ include("playground")
 include("rsocket-core")
 include("rsocket-test")
 
+include("rsocket-typed")
+include("rsocket-typed-serialization")
+
 include("rsocket-transport-local")
 
 include("rsocket-transport-ktor")

@@ -77,3 +77,11 @@ class RSocketServer internal constructor(
         throw error
     }
 }
+
+public inline fun <T, R : RSocketMarker> RSocketServer.bind(
+    wrapper: RSocketWrapper<R>,
+    transport: ServerTransport<T>,
+    crossinline block: suspend ConnectionAcceptorContext.() -> R
+): T = bind(transport) {
+    wrapper.wrapResponder(block())
+}

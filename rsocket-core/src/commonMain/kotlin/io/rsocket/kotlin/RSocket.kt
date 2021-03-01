@@ -20,7 +20,19 @@ import io.ktor.utils.io.core.*
 import io.rsocket.kotlin.payload.*
 import kotlinx.coroutines.flow.*
 
-interface RSocket : Cancellable {
+public interface RSocketMarker
+
+public interface RSocketWrapper<R : RSocketMarker> {
+    public fun wrapRequester(rSocket: RSocket): R
+    public fun wrapResponder(rSocket: R): RSocket
+
+    public companion object : RSocketWrapper<RSocket> {
+        override fun wrapRequester(rSocket: RSocket): RSocket = rSocket
+        override fun wrapResponder(rSocket: RSocket): RSocket = rSocket
+    }
+}
+
+interface RSocket : Cancellable, RSocketMarker {
 
     suspend fun metadataPush(metadata: ByteReadPacket) {
         metadata.release()
