@@ -32,6 +32,10 @@ public class RawAuthMetadata(
         writePacket(content)
     }
 
+    override fun close() {
+        content.close()
+    }
+
     public companion object Reader : AuthMetadataReader<RawAuthMetadata> {
         @DangerousInternalIoApi
         override fun ByteReadPacket.readContent(type: AuthType, pool: ObjectPool<ChunkBuffer>): RawAuthMetadata {

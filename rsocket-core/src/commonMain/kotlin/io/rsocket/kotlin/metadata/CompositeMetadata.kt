@@ -22,6 +22,7 @@ import io.ktor.utils.io.pool.*
 import io.rsocket.kotlin.*
 import io.rsocket.kotlin.core.*
 import io.rsocket.kotlin.frame.io.*
+import kotlin.jvm.*
 
 @ExperimentalMetadataApi
 public fun CompositeMetadata(vararg entries: Metadata): CompositeMetadata =
@@ -30,6 +31,11 @@ public fun CompositeMetadata(vararg entries: Metadata): CompositeMetadata =
 @ExperimentalMetadataApi
 public fun CompositeMetadata(entries: List<Metadata>): CompositeMetadata =
     DefaultCompositeMetadata(entries.map(CompositeMetadata::Entry))
+
+@JvmName("CompositeMetadataWithEntry")
+@ExperimentalMetadataApi
+public fun CompositeMetadata(entries: List<CompositeMetadata.Entry>): CompositeMetadata =
+    DefaultCompositeMetadata(entries)
 
 @ExperimentalMetadataApi
 public interface CompositeMetadata : Metadata {
@@ -42,6 +48,10 @@ public interface CompositeMetadata : Metadata {
             writeLength(it.content.remaining.toInt()) //write metadata length
             writePacket(it.content) //write metadata content
         }
+    }
+
+    override fun close() {
+        entries.forEach { it.content.close() }
     }
 
     public class Entry(public val mimeType: MimeType, public val content: ByteReadPacket) {

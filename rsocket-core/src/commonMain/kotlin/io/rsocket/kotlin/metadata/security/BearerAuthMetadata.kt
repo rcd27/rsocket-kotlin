@@ -30,6 +30,8 @@ public class BearerAuthMetadata(
         writeText(token)
     }
 
+    override fun close(): Unit = Unit
+
     public companion object Reader : AuthMetadataReader<BearerAuthMetadata> {
         @DangerousInternalIoApi
         override fun ByteReadPacket.readContent(type: AuthType, pool: ObjectPool<ChunkBuffer>): BearerAuthMetadata {
