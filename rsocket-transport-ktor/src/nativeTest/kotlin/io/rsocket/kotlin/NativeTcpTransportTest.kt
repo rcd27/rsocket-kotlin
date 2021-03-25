@@ -30,27 +30,27 @@ class NativeTcpTransportTest : TransportTest() {
     private lateinit var serverJob: Job
 
     override suspend fun before(): Unit = coroutineScope {
-        val address = NetworkAddress("0.0.0.0", port.incrementAndGet())
-        server = aSocket(serverSelector).tcp().bind(address)
-        val clientSocket = aSocket(clientSelector).tcp().clientTransport(address)
+//        val address = NetworkAddress("0.0.0.0", port.incrementAndGet())
+//        server = aSocket(serverSelector).tcp().bind(address)
+        val clientSocket = aSocket(clientSelector).tcp().clientTransport("0.0.0.0", 8000)
         client = CONNECTOR.connect(clientSocket)
-        val serverSocket = server.accept()
-        val connection = TcpConnection(serverSocket)
-        serverJob = connection.job
-        SERVER.bind({ accept -> GlobalScope.launch { accept(connection) } }, ACCEPTOR)
+//        val serverSocket = server.accept()
+//        val connection = TcpConnection(serverSocket)
+//        serverJob = connection.job
+//        SERVER.bind({ accept -> GlobalScope.launch { accept(connection) } }, ACCEPTOR)
     }
 
-    override suspend fun after() {
-        serverJob.cancel()
-        client.job.cancel()
-        server.close()
-        serverJob.join()
-        client.join()
-    }
+//    override suspend fun after() {
+//        serverJob.cancel()
+//        client.job.cancel()
+//        server.close()
+//        serverJob.join()
+//        client.join()
+//    }
 
     companion object {
-        private val port = atomic(Random.nextInt(20, 90) * 100)
+        //        private val port = atomic(Random.nextInt(20, 90) * 100)
         private val clientSelector = SelectorManager()
-        private val serverSelector = SelectorManager()
+//        private val serverSelector = SelectorManager()
     }
 }

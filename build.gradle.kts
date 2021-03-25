@@ -72,15 +72,17 @@ subprojects {
         //targets configuration
         extensions.configure<KotlinMultiplatformExtension> {
             val isAutoConfigurable = project.name.startsWith("rsocket") //manual config of others
-            val jvmOnly = project.name == "rsocket-transport-ktor-server" //server is jvm only
-
+            val jvmOnly =
+                project.name == "rsocket-transport-ktor-server" || //server is jvm only
+                        project.name == "rsocket-test-server"
+            val darwin = project.name == "rsocket-transport-darwin"
             //windows target isn't supported by ktor-network
             val supportMingw = project.name != "rsocket-transport-ktor" && project.name != "rsocket-transport-ktor-client"
 
 
             if (!isAutoConfigurable) return@configure
 
-            jvm {
+            if (!darwin) jvm {
                 compilations.all {
                     kotlinOptions {
                         jvmTarget = "1.6"
@@ -97,7 +99,7 @@ subprojects {
 
             if (jvmOnly) return@configure
 
-            js {
+            if (!darwin) js {
                 useCommonJs()
                 //configure running tests for JS
                 nodejs {
@@ -120,7 +122,11 @@ subprojects {
             }
 
             //native targets configuration
-            val hostTargets = listOfNotNull(linuxX64(), macosX64(), if (supportMingw) mingwX64() else null)
+            val hostTargets = when {
+                darwin       -> listOf(macosX64())
+                supportMingw -> listOf(linuxX64(), macosX64(), mingwX64())
+                else         -> listOf(linuxX64(), macosX64())
+            }
 
             val iosTargets = listOf(iosArm32(), iosArm64(), iosX64())
             val tvosTargets = listOf(tvosArm64(), tvosX64())
@@ -145,7 +151,7 @@ subprojects {
             }
 
             //disable cross compilation of linux target on non linux hosts
-            if (!HostManager.hostIsLinux) linuxX64().disableCompilation()
+            if (!HostManager.hostIsLinux && !darwin) linuxX64().disableCompilation()
 
             //disable compilation of part of mac targets
             if (HostManager.hostIsMac) when (macTargetsCompilation) {
@@ -168,22 +174,22 @@ subprojects {
 
             //run tests on release + mimalloc to reduce tests execution time
             //compilation is slower in that mode, but work with buffers is much faster
-            if (ciRun) {
-                targets.all {
-                    if (this is KotlinNativeTargetWithTests<*>) {
-                        binaries.test(listOf(RELEASE))
-                        testRuns.all { setExecutionSourceFrom(binaries.getTest(RELEASE)) }
-                        compilations.all {
-                            kotlinOptions.freeCompilerArgs += "-Xallocator=mimalloc"
-                        }
+//            if (ciRun) {
+            targets.all {
+                if (this is KotlinNativeTargetWithTests<*>) {
+                    binaries.test(listOf(RELEASE))
+                    testRuns.all { setExecutionSourceFrom(binaries.getTest(RELEASE)) }
+                    compilations.all {
+                        kotlinOptions.freeCompilerArgs += "-Xallocator=mimalloc"
                     }
                 }
             }
+//            }
         }
 
         //common configuration
         extensions.configure<KotlinMultiplatformExtension> {
-            val isTestProject = project.name == "rsocket-test"
+            val isTestProject = project.name == "rsocket-test" || project.name == "rsocket-test-server"
             val isLibProject = project.name.startsWith("rsocket")
             val isPlaygroundProject = project.name == "playground"
             val isExampleProject = "examples" in project.path

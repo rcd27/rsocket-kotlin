@@ -36,39 +36,39 @@ abstract class TransportTest : SuspendTest {
         client.cancelAndJoin()
     }
 
-    @Test
+//    @Test
     fun fireAndForget10() = test {
         (1..10).map { async { client.fireAndForget(payload(it)) } }.awaitAll()
     }
 
-    @Test
+    //    @Test
     fun largePayloadFireAndForget10() = test {
         (1..10).map { async { client.fireAndForget(LARGE_PAYLOAD) } }.awaitAll()
     }
 
-    @Test
+    //    @Test
     fun metadataPush10() = test {
         (1..10).map { async { client.metadataPush(packet(MOCK_DATA)) } }.awaitAll()
     }
 
-    @Test
+    //    @Test
     fun largePayloadMetadataPush10() = test {
         (1..10).map { async { client.metadataPush(packet(LARGE_DATA)) } }.awaitAll()
     }
 
-    @Test
+    //    @Test
     fun requestChannel0() = test(10.seconds) {
         val list = client.requestChannel(payload(0), emptyFlow()).toList()
         assertTrue(list.isEmpty())
     }
 
-    @Test
+    //    @Test
     fun requestChannel1() = test(10.seconds) {
         val list = client.requestChannel(payload(0), flowOf(payload(0))).onEach { it.release() }.toList()
         assertEquals(1, list.size)
     }
 
-    @Test
+    //    @Test
     fun requestChannel3() = test {
         val request = flow {
             repeat(3) { emit(payload(it)) }

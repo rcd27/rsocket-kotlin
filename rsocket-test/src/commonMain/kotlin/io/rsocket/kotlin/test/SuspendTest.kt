@@ -26,7 +26,7 @@ interface SuspendTest {
     val beforeTimeout: Duration get() = 10.seconds
     val afterTimeout: Duration get() = 10.seconds
 
-    val debug: Boolean get() = false //change to debug tests for additional logs
+    val debug: Boolean get() = true //change to debug tests for additional logs
 
     suspend fun before(): Unit = Unit
     suspend fun after(): Unit = Unit

@@ -14,33 +14,23 @@
  * limitations under the License.
  */
 
-package io.rsocket.kotlin
+package io.rsocket.kotlin.transport.ktor.client
 
-import io.ktor.application.*
 import io.ktor.client.*
-import io.ktor.client.engine.*
-import io.ktor.routing.*
-import io.ktor.server.engine.*
+import io.ktor.client.engine.js.*
+import io.ktor.client.features.websocket.*
 import io.rsocket.kotlin.test.*
-import io.rsocket.kotlin.transport.ktor.client.*
-import io.rsocket.kotlin.transport.ktor.server.*
-import kotlinx.atomicfu.*
 import kotlinx.coroutines.*
-import kotlin.random.*
-import io.ktor.client.features.websocket.WebSockets as ClientWebSockets
-import io.rsocket.kotlin.transport.ktor.client.RSocketSupport as ClientRSocketSupport
 
-abstract class WebSocketTransportTest(
-    clientEngine: HttpClientEngineFactory<*>,
-    serverEngine: ApplicationEngineFactory<*, *>,
-) : TransportTest() {
+class ClientWebSocketTransportTest : TransportTest() {
 
-    private val httpClient = HttpClient(clientEngine) {
-        install(ClientWebSockets)
-        install(ClientRSocketSupport) { connector = CONNECTOR }
+    private val httpClient = HttpClient(Js) {
+        install(WebSockets)
+        install(RSocketSupport) { connector = CONNECTOR }
     }
 
     override suspend fun before() {
         client = httpClient.rSocket(port = 9000)
     }
+
 }
