@@ -20,29 +20,34 @@ import io.rsocket.*
 import io.rsocket.core.*
 import io.rsocket.frame.decoder.*
 import io.rsocket.transport.local.*
+import io.rsocket.transport.netty.client.*
+import io.rsocket.transport.netty.server.*
 import io.rsocket.util.*
+import kotlinx.benchmark.*
+import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.reactive.*
 import org.reactivestreams.*
 import reactor.core.publisher.*
-import kotlin.random.*
 
-class RSocketJavaBenchmark : RSocketBenchmark<Payload>() {
-
-    lateinit var client: RSocket
+class RSocketJavaBenchmark : RSocketBenchmark<Payload, RSocket>() {
     lateinit var server: Closeable
-
-    lateinit var payload: Payload
     lateinit var payloadMono: Mono<Payload>
     lateinit var payloadsFlux: Flux<Payload>
-    lateinit var payloadsFlow: Flow<Payload>
 
-    override fun setup() {
-        payload = createPayload(payloadSize)
+    @Param("local", "tcp", "ws")
+    var transport: String = "local"
 
-        payloadMono = Mono.fromSupplier(payload::retain)
-        payloadsFlux = Flux.range(0, 5000).map { payload.retain() }
-        payloadsFlow = flow { repeat(5000) { emit(payload.retain()) } }
+    override fun connect(): RSocket {
+        payloadMono = Mono.fromSupplier(this::copyPayload)
+        payloadsFlux = Flux.range(0, 5000).map { copyPayload() }
+
+        val (serverTransport, clientTransport) = when (transport) {
+            "local" -> LocalServerTransport.create("server") to LocalClientTransport.create("server")
+            "tcp"   -> TcpServerTransport.create(9000) to TcpClientTransport.create(9000)
+            "ws"    -> WebsocketServerTransport.create(9000) to WebsocketClientTransport.create(9000)
+            else    -> error("Wrong transport")
+        }
 
         server = RSocketServer.create { _, _ ->
             Mono.just(
@@ -61,12 +66,12 @@ class RSocketJavaBenchmark : RSocketBenchmark<Payload>() {
                 })
         }
             .payloadDecoder(PayloadDecoder.ZERO_COPY)
-            .bind(LocalServerTransport.create("server"))
+            .bind(serverTransport)
             .block()!!
 
-        client = RSocketConnector.create()
+        return RSocketConnector.create()
             .payloadDecoder(PayloadDecoder.ZERO_COPY)
-            .connect(LocalClientTransport.create("server"))
+            .connect(clientTransport)
             .block()!!
     }
 
@@ -75,19 +80,23 @@ class RSocketJavaBenchmark : RSocketBenchmark<Payload>() {
         server.dispose()
     }
 
-    override fun createPayload(size: Int): Payload = if (size == 0) EmptyPayload.INSTANCE else ByteBufPayload.create(
-        ByteArray(size / 2).also { Random.nextBytes(it) },
-        ByteArray(size / 2).also { Random.nextBytes(it) }
-    )
-
+    override fun emptyPayload(): Payload = EmptyPayload.INSTANCE
+    override fun createPayload(data: ByteArray, metadata: ByteArray): Payload = ByteBufPayload.create(data, metadata)
     override fun releasePayload(payload: Payload) {
         payload.release()
     }
 
-    override suspend fun doRequestResponse(): Payload = client.requestResponse(payload.retain()).awaitSingle()
+    override fun copyPayload(): Payload = payload.retain()
 
-    override suspend fun doRequestStream(): Flow<Payload> = client.requestStream(payload.retain()).asFlow()
+    override suspend fun RSocket.doRequestResponse(payload: Payload): Payload = requestResponse(payload).awaitSingle()
 
-    override suspend fun doRequestChannel(): Flow<Payload> = client.requestChannel(payloadsFlow.asPublisher()).asFlow()
+    override suspend fun RSocket.doRequestStream(payload: Payload): Flow<Payload> = requestStream(payload).asFlow()
 
+    override suspend fun RSocket.doRequestChannel(payload: Payload, payloads: Flow<Payload>): Flow<Payload> =
+        requestChannel(payloads.onStart { emit(payload) }.asPublisher()).asFlow()
+
+}
+
+internal actual fun runBenchmark(block: suspend CoroutineScope.() -> Unit) {
+    runBlocking(block = block)
 }
