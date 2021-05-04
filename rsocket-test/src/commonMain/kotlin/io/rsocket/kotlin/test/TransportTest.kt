@@ -228,7 +228,8 @@ abstract class TransportTest : SuspendTest, TestWithLeakCheck {
         }
 
         val ACCEPTOR = ConnectionAcceptor {
-            TestRSocket()
+            RSocketWithDispatcher(Dispatchers.Default, TestRSocket())
+//            TestRSocket()
         }
 
         const val MOCK_DATA: String = "test-data"
