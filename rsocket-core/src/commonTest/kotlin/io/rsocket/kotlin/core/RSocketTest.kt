@@ -134,8 +134,8 @@ class RSocketTest : SuspendTest, TestWithLeakCheck {
     fun testStreamRequesterError() = test {
         val requester = start(RSocketRequestHandler {
             requestStream {
-                (0..100).asFlow().map {
-                    payload(it.toString())
+                (0..100).asFlow().transform {
+                    emitOrClose(payload(it.toString()))
                 }
             }
         })
@@ -158,8 +158,8 @@ class RSocketTest : SuspendTest, TestWithLeakCheck {
     fun testStreamCancel() = test {
         val requester = start(RSocketRequestHandler {
             requestStream {
-                (0..100).asFlow().map {
-                    payload(it.toString())
+                (0..100).asFlow().transform {
+                    emitOrClose(payload(it.toString()))
                 }
             }
         })
@@ -178,8 +178,8 @@ class RSocketTest : SuspendTest, TestWithLeakCheck {
     fun testStreamCancelWithChannel() = test {
         val requester = start(RSocketRequestHandler {
             requestStream {
-                (0..100).asFlow().map {
-                    payload(it.toString())
+                (0..100).asFlow().transform {
+                    emitOrClose(payload(it.toString()))
                 }
             }
         })
@@ -191,7 +191,8 @@ class RSocketTest : SuspendTest, TestWithLeakCheck {
         repeat(18) {
             channel.receive().release()
         }
-        assertTrue(channel.receiveOrClosed().isClosed)
+        channel.receiveOrNull()
+        assertTrue(channel.isClosedForReceive)
     }
 
     @Test
@@ -215,14 +216,42 @@ class RSocketTest : SuspendTest, TestWithLeakCheck {
         val requester = start(RSocketRequestHandler {
             requestChannel { init, payloads ->
                 init.release()
-                payloads.catch { error.complete(it) }
+                payloads.onStart { delay(100) }.catch {
+                    error.complete(it)
+                    emit(Payload.Empty)
+                }
             }
         })
-        val request = flow<Payload> { error("test") }
-        requester.requestChannel(Payload.Empty, request).collect()
+        val request = flow<Payload> {
+            delay(200)
+            error("test")
+        }
+        assertFailsWith(IllegalStateException::class, "test") {
+            requester.requestChannel(Payload.Empty, request).collect()
+        }
         val e = error.await()
         assertTrue(e is RSocketError.ApplicationError)
         assertEquals("test", e.message)
+    }
+
+    @Test
+    fun testErrorPropagatesCorrectly2() = test {
+        val requester = start(RSocketRequestHandler {
+            requestChannel { init, _ ->
+                init.release()
+                flow {
+                    delay(100)
+                    error("test")
+                }
+            }
+        })
+        val request = flow {
+            emit(Payload.Empty)
+            delay(500)
+        }
+        assertFailsWith(RSocketError.ApplicationError::class, "test") {
+            requester.requestChannel(Payload.Empty, request).collect()
+        }
     }
 
     @Test
@@ -373,7 +402,7 @@ class RSocketTest : SuspendTest, TestWithLeakCheck {
         delay(100)
         assertFalse(requesterChannel.isClosedForSend)
         assertFalse(responderChannel.isClosedForReceive)
-        payloads.forEach { requesterChannel.send(it.copy()) } //TODO?
+        payloads.forEach { requesterChannel.send(it.copy()) }
         payloads.forEach { responderChannel.checkReceived(it) }
     }
 
