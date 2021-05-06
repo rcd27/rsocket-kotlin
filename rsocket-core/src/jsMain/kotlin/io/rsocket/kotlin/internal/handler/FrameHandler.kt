@@ -14,6 +14,13 @@
  * limitations under the License.
  */
 
-package io.rsocket.kotlin.keepalive
+package io.rsocket.kotlin.internal.handler
 
-internal actual fun currentMillis(): Long = System.currentTimeMillis()
+import kotlinx.coroutines.*
+
+internal actual abstract class ResponderFrameHandler : BaseResponderFrameHandler() {
+    actual override var job: Job? = null
+}
+
+internal actual abstract class RequesterFrameHandler : BaseRequesterFrameHandler() {
+}

@@ -14,8 +14,10 @@
  * limitations under the License.
  */
 
-package io.rsocket.kotlin.keepalive
+package io.rsocket.kotlin.internal
 
 import kotlin.js.*
 
 internal actual fun currentMillis(): Long = Date.now().toLong()
+
+public actual fun currentThreadName(): String = "default"

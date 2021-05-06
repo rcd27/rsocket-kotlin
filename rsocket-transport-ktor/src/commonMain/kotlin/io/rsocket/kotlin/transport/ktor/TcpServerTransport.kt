@@ -22,6 +22,7 @@ import io.ktor.network.selector.*
 import io.ktor.network.sockets.*
 import io.ktor.util.*
 import io.ktor.util.network.*
+import io.rsocket.kotlin.internal.*
 import io.rsocket.kotlin.transport.*
 import kotlinx.coroutines.*
 
@@ -39,12 +40,18 @@ public fun TcpServerTransport(
     configure: SocketOptions.AcceptorOptions.() -> Unit = {},
 ): ServerTransport<Job> = ServerTransport { accept ->
     val serverSocket = aSocket(selector).tcp().bind(localAddress, configure)
-    GlobalScope.launch(serverSocket.socketContext + Dispatchers.Unconfined + ignoreExceptionHandler, CoroutineStart.UNDISPATCHED) {
+    println("tcp start: ${currentThreadName()}")
+    GlobalScope.launch(serverSocket.socketContext + Dispatchers.Default + ignoreExceptionHandler) {
         supervisorScope {
             while (isActive) {
+                println("tcp before: ${currentThreadName()}")
                 val clientSocket = serverSocket.accept()
+                println("tcp after: ${currentThreadName()}")
                 val connection = TcpConnection(clientSocket)
-                launch(start = CoroutineStart.UNDISPATCHED) { accept(connection) }
+                launch(start = CoroutineStart.UNDISPATCHED) {
+                    println("tcp accept: ${currentThreadName()}")
+                    accept(connection)
+                }
             }
         }
     }

@@ -56,7 +56,7 @@ internal constructor(
     }
 
     override fun start(accept: suspend (Connection) -> Unit): Job =
-        GlobalScope.launch(job + Dispatchers.Unconfined, CoroutineStart.UNDISPATCHED) {
+        GlobalScope.launch(job + Dispatchers.Default) {
             supervisorScope {
                 connections.consumeEach { connection ->
                     launch(start = CoroutineStart.UNDISPATCHED) { accept(connection) }

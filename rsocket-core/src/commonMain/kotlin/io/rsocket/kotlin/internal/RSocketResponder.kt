@@ -16,82 +16,109 @@
 
 package io.rsocket.kotlin.internal
 
+import io.ktor.utils.io.core.*
 import io.rsocket.kotlin.*
-import io.rsocket.kotlin.frame.*
-import io.rsocket.kotlin.internal.flow.*
+import io.rsocket.kotlin.internal.handler.*
+import io.rsocket.kotlin.payload.*
 import kotlinx.coroutines.*
 
 internal class RSocketResponder(
-    private val state: RSocketState,
+    private val connection: FrameSender,
+    private val requestScope: CoroutineScope,
     private val requestHandler: RSocket,
 ) {
 
-    fun handleMetadataPush(frame: MetadataPushFrame) {
-        state.launch {
-            requestHandler.metadataPush(frame.metadata)
-        }.invokeOnCompletion {
-            frame.release()
+    fun handleMetadataPush(metadata: ByteReadPacket): Job = requestScope.launch(start = CoroutineStart.UNDISPATCHED) {
+        try {
+            println("responder handleMetadataPush before: ${currentThreadName()}")
+            requestHandler.metadataPush(metadata)
+            println("responder handleMetadataPush after: ${currentThreadName()}")
+        } finally {
+            metadata.release()
         }
     }
 
-    fun handleFireAndForget(frame: RequestFrame) {
-        state.launch {
-            requestHandler.fireAndForget(frame.payload)
-        }.invokeOnCompletion {
-            frame.release()
+    fun handleFireAndForget(payload: Payload, handler: ResponderFireAndForgetFrameHandler): Job =
+        requestScope.launch(start = CoroutineStart.UNDISPATCHED) {
+            try {
+                println("responder handleFireAndForget before: ${currentThreadName()}")
+                requestHandler.fireAndForget(payload)
+                println("responder handleFireAndForget after: ${currentThreadName()}")
+            } finally {
+                handler.onSendComplete()
+                payload.release()
+            }
         }
-    }
 
-    fun handlerRequestResponse(frame: RequestFrame): Unit = with(state) {
-        val streamId = frame.streamId
-        launchCancelable(streamId) {
-            val response = requestOrCancel(streamId) {
-                requestHandler.requestResponse(frame.payload)
-            } ?: return@launchCancelable
-            if (isActive) send(NextCompletePayloadFrame(streamId, response))
-        }.invokeOnCompletion {
-            frame.release()
+    fun handleRequestResponse(payload: Payload, id: Int, handler: ResponderRequestResponseFrameHandler): Job =
+        requestScope.launch(start = CoroutineStart.UNDISPATCHED) {
+            handler.sendOrFail(id, payload) {
+                println("responder handleRequestResponse before: ${currentThreadName()}")
+                val response = requestHandler.requestResponse(payload)
+                println("responder handleRequestResponse after: ${currentThreadName()}")
+                connection.sendNextCompletePayload(id, response)
+                println("responder handleRequestResponse after2: ${currentThreadName()}")
+            }
         }
-    }
 
-    fun handleRequestStream(initFrame: RequestFrame): Unit = with(state) {
-        val streamId = initFrame.streamId
-        launchCancelable(streamId) {
-            val response = requestOrCancel(streamId) {
-                requestHandler.requestStream(initFrame.payload)
-            } ?: return@launchCancelable
-            response.collectLimiting(streamId, initFrame.initialRequest)
-        }.invokeOnCompletion {
-            initFrame.release()
+    fun handleRequestStream(payload: Payload, id: Int, handler: ResponderRequestStreamFrameHandler): Job =
+        requestScope.launch(start = CoroutineStart.UNDISPATCHED) {
+            handler.sendOrFail(id, payload) {
+                println("responder handleRequestResponse before: ${currentThreadName()}")
+                requestHandler.requestStream(payload).collectLimiting(handler.limiter) { connection.sendNextPayload(id, it) }
+                println("responder handleRequestStream after: ${currentThreadName()}")
+                connection.sendCompletePayload(id)
+                println("responder handleRequestStream after complete: ${currentThreadName()}")
+            }
         }
-    }
 
-    fun handleRequestChannel(initFrame: RequestFrame): Unit = with(state) {
-        val streamId = initFrame.streamId
-        val receiver = createReceiverFor(streamId)
-
-        val request = RequestChannelResponderFlow(streamId, receiver, state)
-
-        launchCancelable(streamId) {
-            val response = requestOrCancel(streamId) {
-                requestHandler.requestChannel(initFrame.payload, request)
-            } ?: return@launchCancelable
-            response.collectLimiting(streamId, initFrame.initialRequest)
-        }.invokeOnCompletion {
-            initFrame.release()
-            if (it != null) receiver.cancelConsumed(it) //TODO check it
+    @ExperimentalStreamsApi
+    fun handleRequestChannel(payload: Payload, id: Int, handler: ResponderRequestChannelFrameHandler): Job =
+        requestScope.launch(start = CoroutineStart.UNDISPATCHED) {
+            val payloads = requestFlow { strategy, initialRequest ->
+                handler.receiveOrCancel(id) {
+                    connection.sendRequestN(id, initialRequest)
+                    emitAllWithRequestN(handler.channel, strategy) { connection.sendRequestN(id, it) }
+                }
+            }
+            handler.sendOrFail(id, payload) {
+                println("responder handleRequestChannel before: ${currentThreadName()}")
+                requestHandler.requestChannel(payload, payloads).collectLimiting(handler.limiter) { connection.sendNextPayload(id, it) }
+                println("responder handleRequestChannel after: ${currentThreadName()}")
+                connection.sendCompletePayload(id)
+                println("responder handleRequestChannel after complete: ${currentThreadName()}")
+            }
         }
-    }
 
-    private inline fun <T : Any> CoroutineScope.requestOrCancel(streamId: Int, block: () -> T): T? =
+    private suspend inline fun SendFrameHandler.sendOrFail(
+        id: Int,
+        payload: Payload,
+        block: () -> Unit
+    ) {
         try {
             block()
-        } catch (e: Throwable) {
-            if (isActive) {
-                state.send(ErrorFrame(streamId, e))
-                cancel("Request handling failed", e) //KLUDGE: can be related to IR, because using `throw` fails on JS IR and Native
-            }
-            null
+            onSendComplete()
+        } catch (cause: Throwable) {
+            val isFailed = onSendFailed(cause)
+            if (currentCoroutineContext().isActive && isFailed) connection.sendError(id, cause)
+            throw cause
+        } finally {
+            payload.release()
         }
+    }
+
+    private suspend inline fun ReceiveFrameHandler.receiveOrCancel(
+        id: Int,
+        block: () -> Unit
+    ) {
+        try {
+            block()
+            onReceiveComplete()
+        } catch (cause: Throwable) {
+            val isCancelled = onReceiveCancelled(cause)
+            if (requestScope.isActive && isCancelled) connection.sendCancel(id)
+            throw cause
+        }
+    }
 
 }

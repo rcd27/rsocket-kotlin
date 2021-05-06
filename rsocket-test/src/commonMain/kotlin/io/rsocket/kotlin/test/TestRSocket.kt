@@ -18,9 +18,11 @@ package io.rsocket.kotlin.test
 
 import io.ktor.utils.io.core.*
 import io.rsocket.kotlin.*
+import io.rsocket.kotlin.internal.*
 import io.rsocket.kotlin.payload.*
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
+import kotlin.coroutines.*
 
 class TestRSocket : RSocket {
     override val job: Job = Job()
@@ -30,11 +32,13 @@ class TestRSocket : RSocket {
     override suspend fun fireAndForget(payload: Payload): Unit = payload.release()
 
     override suspend fun requestResponse(payload: Payload): Payload {
+        println("test requestResponse: ${currentThreadName()}")
         payload.release()
         return Payload(packet(data), packet(metadata))
     }
 
     override fun requestStream(payload: Payload): Flow<Payload> = flow {
+        println("test requestStream: ${currentThreadName()}")
         payload.release()
         repeat(10000) {
             emitOrClose(Payload(packet(data), packet(metadata)))
@@ -42,6 +46,7 @@ class TestRSocket : RSocket {
     }
 
     override fun requestChannel(initPayload: Payload, payloads: Flow<Payload>): Flow<Payload> = flow {
+        println("test requestChannel: ${currentThreadName()}")
         initPayload.release()
         payloads.collect { emitOrClose(it) }
     }

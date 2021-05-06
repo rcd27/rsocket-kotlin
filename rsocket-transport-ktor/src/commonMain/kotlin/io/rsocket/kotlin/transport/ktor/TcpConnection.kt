@@ -24,6 +24,7 @@ import io.ktor.utils.io.core.internal.*
 import io.rsocket.kotlin.*
 import io.rsocket.kotlin.Connection
 import io.rsocket.kotlin.frame.io.*
+import io.rsocket.kotlin.internal.*
 import kotlinx.coroutines.*
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.channels.*
@@ -43,9 +44,12 @@ internal class TcpConnection(private val socket: Socket) : Connection, Coroutine
 
     init {
         launch {
+            println("tcp write: ${currentThreadName()}")
             socket.openWriteChannel(autoFlush = true).use {
                 while (isActive) {
+                    println("tcp write 1: ${currentThreadName()}")
                     val packet = sendChannel.receive()
+                    println("tcp write 2: ${currentThreadName()}")
                     val length = packet.remaining.toInt()
                     writePacket {
                         writeLength(length)
@@ -55,10 +59,14 @@ internal class TcpConnection(private val socket: Socket) : Connection, Coroutine
             }
         }
         launch {
+            println("tcp read: ${currentThreadName()}")
             socket.openReadChannel().apply {
                 while (isActive) {
+                    println("tcp read 1: ${currentThreadName()}")
                     val length = readPacket(3).readLength()
+                    println("tcp read 2: ${currentThreadName()}")
                     val packet = readPacket(length)
+                    println("tcp read 3: ${currentThreadName()}")
                     try {
                         receiveChannel.send(packet)
                     } catch (cause: Throwable) {
