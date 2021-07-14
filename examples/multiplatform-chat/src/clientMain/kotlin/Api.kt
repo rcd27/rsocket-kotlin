@@ -40,12 +40,12 @@ suspend fun connectToApiUsingWS(name: String): Api {
         }
     }
 
-    return Api(client.rSocket(port = 9000))
+    return Api(client.rSocket(port = 9090))
 }
 
 @OptIn(InternalAPI::class)
 suspend fun connectToApiUsingTCP(name: String): Api {
-    val transport = TcpClientTransport(SelectorManager(), "0.0.0.0", 8000)
+    val transport = TcpClientTransport(SelectorManager(), "0.0.0.0", 9000)
     return Api(connector(name).connect(transport))
 }
 

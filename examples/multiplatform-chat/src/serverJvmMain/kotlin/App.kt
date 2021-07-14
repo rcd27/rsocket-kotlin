@@ -101,7 +101,7 @@ fun main() {
     rSocketServer.bind(TcpServerTransport(ActorSelectorManager(Dispatchers.IO), port = 9000), acceptor)
 
     //start WS server
-    embeddedServer(CIO, port = 9000) {
+    embeddedServer(CIO, port = 9090) {
         install(WebSockets)
         install(RSocketSupport) {
             server = rSocketServer
